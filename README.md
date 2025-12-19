@@ -1,0 +1,2 @@
+# Overview
+Solidified Rust skills after reading [The Rust Programming Language](https://doc.rust-lang.org/book/title-page.html) by creating a text-editor following this [tutorial](https://philippflenker.com/hecto/). Added improvement, changes can be found in `CHANGELOG.MD` in `add-on` branch. Will not PR change since changes are what I added on after the tutorial (does not aid in learning experience).
