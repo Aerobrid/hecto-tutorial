@@ -3,6 +3,7 @@ use std::{
     fmt::{self, Display},
 };
 use super::{Annotation, AnnotationType};
+use unicode_segmentation::UnicodeSegmentation;
 mod annotatedstringpart;
 use annotatedstringpart::AnnotatedStringPart;
 mod annotatedstringiterator;
@@ -35,6 +36,32 @@ impl AnnotatedString {
             start,
             end,
         });
+    }
+
+    // annotation using grapheme indices instead of byte indices
+    // Converts grapheme-start/end to byte offsets and calls `add_annotation`.
+    pub fn add_annotation_grapheme(
+        &mut self,
+        annotation_type: AnnotationType,
+        grapheme_start: usize,
+        grapheme_end: usize,
+    ) {
+        if grapheme_start >= grapheme_end {
+            return;
+        }
+        let mut positions: Vec<ByteIdx> = self
+            .string
+            .grapheme_indices(true)
+            .map(|(byte_idx, _)| byte_idx)
+            .collect();
+        // sentinel end position
+        positions.push(self.string.len());
+
+        let start_byte = positions.get(grapheme_start).copied().unwrap_or(self.string.len());
+        let end_byte = positions.get(grapheme_end).copied().unwrap_or(self.string.len());
+        if start_byte < end_byte {
+            self.add_annotation(annotation_type, start_byte, end_byte);
+        }
     }
     pub fn truncate_left_until(&mut self, until: ByteIdx) {
         self.replace(0, until, "");

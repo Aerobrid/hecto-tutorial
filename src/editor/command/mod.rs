@@ -1,5 +1,5 @@
 use crate::prelude::*;
-use crossterm::event::Event;
+use crossterm::event::{Event, MouseEvent};
 use std::convert::TryFrom;
 mod movecommand;
 pub use movecommand::Move;
@@ -13,6 +13,7 @@ pub enum Command {
     Move(Move),
     Edit(Edit),
     System(System),
+    Mouse(MouseEvent),
 }
 
 // clippy::as_conversions: Will run into problems for rare edge case systems where usize < u16
@@ -30,6 +31,7 @@ impl TryFrom<Event> for Command {
                 height: height_u16 as usize,
                 width: width_u16 as usize,
             }))),
+            Event::Mouse(mouse_event) => Ok(Self::Mouse(mouse_event)),
             _ => Err(format!("Event not supported: {event:?}")),
         }
     }

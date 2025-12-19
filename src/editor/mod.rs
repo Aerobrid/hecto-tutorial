@@ -73,7 +73,7 @@ impl Editor {
         let mut editor = Self::default();
         let size = Terminal::size().unwrap_or_default();
         editor.handle_resize_command(size);
-        editor.update_message("HELP: Ctrl-F = find | Ctrl-S = save | Ctrl-Q = quit");
+        editor.update_message("HELP: Ctrl-D = find | Ctrl-S = save | Ctrl-C = quit");
 
         let args: Vec<String> = env::args().collect();
         if let Some(file_name) = args.get(1) {
@@ -159,11 +159,18 @@ impl Editor {
         let should_process = match &event {
             Event::Key(KeyEvent { kind, .. }) => kind == &KeyEventKind::Press,
             Event::Resize(_, _) => true,
+            Event::Mouse(_) => true,
             _ => false,
         };
 
         if should_process {
             if let Ok(command) = Command::try_from(event) {
+                // handle mouse commands immediately
+                if let Command::Mouse(mouse_event) = command {
+                    self.view.handle_mouse_event(mouse_event);
+                    self.refresh_status();
+                    return;
+                }
                 self.process_command(command);
             }
         }
@@ -197,6 +204,7 @@ impl Editor {
             System(Save) => self.handle_save_command(),
             Edit(edit_command) => self.view.handle_edit_command(edit_command),
             Move(move_command) => self.view.handle_move_command(move_command),
+            _ => {}
         }
     }
 
@@ -228,7 +236,7 @@ impl Editor {
             self.should_quit = true;
         } else if self.view.get_status().is_modified {
             self.update_message(&format!(
-                "WARNING! File has unsaved changes. Press Ctrl-Q {} more times to quit.",
+                "WARNING! File has unsaved changes. Press Ctrl-C {} more times to quit.",
                 QUIT_TIMES - self.quit_times - 1
             ));
 
@@ -265,6 +273,7 @@ impl Editor {
                 self.set_prompt(PromptType::None);
             }
             Edit(edit_command) => self.command_bar.handle_edit_command(edit_command),
+            _ => {}
         }
     }
     fn save(&mut self, file_name: Option<&str>) {
@@ -301,6 +310,7 @@ impl Editor {
             Move(Right | Down) => self.view.search_next(),
             Move(Up | Left) => self.view.search_prev(),
             System(Quit | Resize(_) | Search | Save) | Move(_) => {} // Not applicable during save, Resize already handled at this stage
+            _ => {}
         }
     }
     // endregion

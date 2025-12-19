@@ -2,6 +2,7 @@ use std::{cmp::min, io::Error};
 
 use crate::editor::RowIdx;
 use crate::prelude::*;
+use crate::editor::AnnotationType;
 
 use super::super::{
     command::{Edit, Move},
@@ -27,6 +28,8 @@ pub struct View {
     text_location: Location,
     scroll_offset: Position,
     search_info: Option<SearchInfo>,
+    selection_anchor: Option<Location>,
+    selection_cursor: Option<Location>,
 }
 
 impl View {
@@ -117,6 +120,59 @@ impl View {
     }
     pub fn search_prev(&mut self) {
         self.search_in_direction(self.text_location, SearchDirection::Backward);
+    }
+    // Handle mouse events for selection and caret movement
+    pub fn handle_mouse_event(&mut self, event: crossterm::event::MouseEvent) {
+        use crossterm::event::{MouseButton, MouseEventKind};
+        let col = event.column as usize;
+        let row = event.row as usize;
+        match event.kind {
+            MouseEventKind::Down(MouseButton::Left) => {
+                let loc = self.screen_pos_to_location(col, row);
+                self.selection_anchor = Some(loc);
+                self.selection_cursor = Some(loc);
+                self.text_location = loc;
+                self.scroll_text_location_into_view();
+                self.set_needs_redraw(true);
+            }
+            MouseEventKind::Drag(MouseButton::Left) => {
+                if self.selection_anchor.is_some() {
+                    let loc = self.screen_pos_to_location(col, row);
+                    self.selection_cursor = Some(loc);
+                    self.text_location = loc;
+                    self.scroll_text_location_into_view();
+                    self.set_needs_redraw(true);
+                }
+            }
+            MouseEventKind::Up(MouseButton::Left) => {
+                if self.selection_anchor.is_some() {
+                    let loc = self.screen_pos_to_location(col, row);
+                    self.selection_cursor = Some(loc);
+                    self.text_location = loc;
+                    self.set_needs_redraw(true);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn screen_pos_to_location(&self, col: ColIdx, row: RowIdx) -> Location {
+        let line_idx = row.saturating_add(self.scroll_offset.row);
+        let col_in_line = col.saturating_add(self.scroll_offset.col);
+        let grapheme_count = self.buffer.grapheme_count(line_idx);
+        let mut g = 0usize;
+        while g <= grapheme_count {
+            let w = self.buffer.width_until(line_idx, g);
+            if w > col_in_line {
+                break;
+            }
+            g = g.saturating_add(1);
+        }
+        let grapheme_idx = g.saturating_sub(1).min(grapheme_count);
+        Location {
+            grapheme_idx,
+            line_idx,
+        }
     }
     // endregion
 
@@ -383,10 +439,43 @@ impl UIComponent for View {
                 .saturating_add(scroll_top);
             let left = self.scroll_offset.col;
             let right = self.scroll_offset.col.saturating_add(width);
-            if let Some(annotated_string) =
+            if let Some(mut annotated_string) =
                 self.buffer
                     .get_highlighted_substring(line_idx, left..right, &highlighter)
             {
+                // Add (apply) selection annotation if selection intersects this line
+                if let (Some(anchor), Some(cursor)) = (self.selection_anchor, self.selection_cursor)
+                {
+                    let (start_loc, end_loc) = if (anchor.line_idx < cursor.line_idx)
+                        || (anchor.line_idx == cursor.line_idx && anchor.grapheme_idx <= cursor.grapheme_idx)
+                    {
+                        (anchor, cursor)
+                    } else {
+                        (cursor, anchor)
+                    };
+
+                    if line_idx >= start_loc.line_idx && line_idx <= end_loc.line_idx {
+                        let line_grapheme_count = self.buffer.grapheme_count(line_idx);
+                        let sel_start = if line_idx == start_loc.line_idx {
+                            start_loc.grapheme_idx
+                        } else {
+                            0
+                        };
+                        let sel_end = if line_idx == end_loc.line_idx {
+                            end_loc.grapheme_idx
+                        } else {
+                            line_grapheme_count
+                        };
+                        if sel_start < sel_end {
+                            annotated_string.add_annotation_grapheme(
+                                AnnotationType::SelectedMatch,
+                                sel_start,
+                                sel_end,
+                            );
+                        }
+                    }
+                }
+
                 Terminal::print_annotated_row(current_row, &annotated_string)?;
             } else if current_row == top_third && self.buffer.is_empty() {
                 Self::render_line(current_row, &Self::build_welcome_message(width))?;

@@ -33,19 +33,7 @@ impl<'a> SearchResultHighlighter<'a> {
                 });
             });
     }
-    fn highlight_selected_match(&self, result: &mut Vec<Annotation>) {
-        if let Some(selected_match) = self.selected_match {
-            if self.matched_word.is_empty() {
-                return;
-            }
-            let start = selected_match.grapheme_idx;
-            result.push(Annotation {
-                annotation_type: AnnotationType::SelectedMatch,
-                start,
-                end: start.saturating_add(self.matched_word.len()),
-            });
-        }
-    }
+    // (selection handling moved into `highlight` where `line` is available)
 }
 
 impl<'a> SyntaxHighlighter for SearchResultHighlighter<'a> {
@@ -54,7 +42,13 @@ impl<'a> SyntaxHighlighter for SearchResultHighlighter<'a> {
         self.highlight_matched_words(line, &mut result);
         if let Some(selected_match) = self.selected_match {
             if selected_match.line_idx == idx {
-                self.highlight_selected_match(&mut result);
+                // convert grapheme index to byte index using Line helper
+                let start_byte = line.grapheme_idx_to_byte_idx(selected_match.grapheme_idx);
+                result.push(Annotation {
+                    annotation_type: AnnotationType::SelectedMatch,
+                    start: start_byte,
+                    end: start_byte.saturating_add(self.matched_word.len()),
+                });
             }
         }
         self.highlights.insert(idx, result);

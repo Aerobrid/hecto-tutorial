@@ -10,6 +10,7 @@ use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, size, Clear, ClearType, DisableLineWrap, EnableLineWrap,
     EnterAlternateScreen, LeaveAlternateScreen, SetTitle,
 };
+use crossterm::event::{DisableMouseCapture, EnableMouseCapture};
 use crossterm::{queue, Command};
 use std::io::{stdout, Error, Write};
 
@@ -25,6 +26,8 @@ pub struct Terminal;
 
 impl Terminal {
     pub fn terminate() -> Result<(), Error> {
+        // Disable mouse capture before leaving
+        Self::queue_command(DisableMouseCapture)?;
         Self::leave_alternate_screen()?;
         Self::enable_line_wrap()?;
         Self::show_caret()?;
@@ -35,6 +38,8 @@ impl Terminal {
     pub fn initialize() -> Result<(), Error> {
         enable_raw_mode()?;
         Self::enter_alternate_screen()?;
+        // Enable mouse capture to receive mouse events
+        Self::queue_command(EnableMouseCapture)?;
         Self::disable_line_wrap()?;
         Self::clear_screen()?;
         Self::execute()?;
